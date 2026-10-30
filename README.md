@@ -1,3 +1,7 @@
+## Opt-in Version 2A real-data pilot
+
+Run `streamlit run app_v2a.py`. The existing `app.py` entry point remains Version 1 DEMO. Read [V2A methods, sources, limitations and refresh instructions](V2A.md) before enabling REAL mode. Five-stock live SEC filing verification remains blocked by development network restrictions; this is a draft pilot, not a validated release.
+
 # Signal Studio — DEMO US Stock Screener V1
 
 Python 3.12 + Streamlit. **All data, prices, financial metrics, SPY benchmark history and signals are deterministic synthetic DEMO values. Nothing is live or an actual company's financial result.** The fixed snapshot is 2026-10-29 20:00 UTC; fundamental snapshot is 2026-09-30 UTC. Evaluation time is displayed separately. Symbols DEMO01–DEMO12 are fictional. No brokerage, trading or order execution.
