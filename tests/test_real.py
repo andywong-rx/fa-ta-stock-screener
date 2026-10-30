@@ -21,8 +21,8 @@ def fixture():
         add('EarningsPerShareDiluted',2*m,y,'USD/shares')
         add('WeightedAverageNumberOfDilutedSharesOutstanding',100*m,y,'shares')
         for tag,v in [('StockholdersEquity',100*m),('CashAndCashEquivalentsAtCarryingValue',20*m),('LongTermDebtCurrent',10*m),('LongTermDebtNoncurrent',30*m)]:
-            facts.setdefault(tag,{'units':{'USD':[]}})['units']['USD'].append(dict(end=f'{y}-12-31',filed=f'{y+1}-02-01',form='10-K',val=v))
-    return {'facts':{'us-gaap':facts}}
+            facts.setdefault(tag,{'units':{'USD':[]}})['units']['USD'].append(dict(end=f'{y}-12-31',filed=f'{y+1}-02-01',form='10-K',val=v,accn='test-accession'))
+    return {'cik':320193,'entityName':'ARTIFICIAL TEST COMPANY','facts':{'us-gaap':facts}}
 
 def test_annual_arithmetic_and_roic():
     values,p,a=extract(fixture(),'2025-03-01')
@@ -50,7 +50,7 @@ def test_missing_not_zero_and_negative_denominator():
 def test_amendment_cutoff_and_nonannual():
     f=fixture(); rr=f['facts']['us-gaap']['Revenues']['units']['USD']
     rr.extend([dict(start='2024-01-01',end='2024-12-31',filed='2025-04-01',form='10-K/A',val=180,accn='amended'),
-               dict(start='2025-01-01',end='2025-03-31',filed='2025-05-01',form='10-Q',val=999)])
+               dict(start='2025-01-01',end='2025-03-31',filed='2025-05-01',form='10-Q',val=999,accn='test-quarter')])
     assert extract(f,'2025-03-01')[0]['Revenue Growth YoY']==50
     assert extract(f,'2025-05-02')[0]['Revenue Growth YoY']==80
     assert extract(f,'2025-05-02')[1]['revenue']['accn']=='amended'
@@ -64,8 +64,8 @@ def test_period_mismatch():
 
 def test_ttm_bridge_and_missing_comparison():
     f=fixture(); rr=f['facts']['us-gaap']['EarningsPerShareDiluted']['units']['USD/shares']
-    rr.extend([dict(start='2025-01-01',end='2025-06-30',filed='2025-08-01',form='10-Q',val=2),
-               dict(start='2024-01-01',end='2024-06-30',filed='2025-08-01',form='10-Q',val=1)])
+    rr.extend([dict(start='2025-01-01',end='2025-06-30',filed='2025-08-01',form='10-Q',val=2,accn='test-ytd'),
+               dict(start='2024-01-01',end='2024-06-30',filed='2025-08-01',form='10-Q',val=1,accn='test-prior-ytd')])
     assert trailing_eps(f,'2025-03-01')[0]==3
     assert trailing_eps(f,'2025-07-31')[0] is None  # stale annual, future YTD not yet filed
     assert trailing_eps(f,'2025-08-02')[0]==4
@@ -114,10 +114,10 @@ def test_sec_throttle_retry_cache_and_identity(tmp_path,monkeypatch):
     def open_(req,timeout):
         calls.append(req)
         if len(calls)==1: raise urllib.error.HTTPError(req.full_url,429,'limit',{'Retry-After':'2'},None)
-        return io.BytesIO(json.dumps({'ok':True}).encode())
+        return io.BytesIO(json.dumps(fixture()).encode())
     monkeypatch.setattr('urllib.request.urlopen',open_)
     monkeypatch.setattr('screener.real.time.sleep',sleeps.append)
-    assert client.get('https://data.sec.gov/test')=={'ok':True}
+    assert client.get('https://data.sec.gov/test')==fixture()
     assert len(calls)==2 and calls[0].get_header('User-agent')=='Unit test test@example.com'
     assert 2 in sleeps
     client.get('https://data.sec.gov/test')
@@ -178,10 +178,10 @@ def test_mapping_and_unknown_cik(tmp_path,monkeypatch):
     calls=[]
     def get(url,ttl=86400):
         calls.append(url)
-        return {'0':{'ticker':'BRK-B','cik_str':1067983}} if url.endswith('company_tickers.json') else fixture()
+        return {'0':{'ticker':'BRK-B','cik_str':320193,'title':'ARTIFICIAL TEST COMPANY'}} if url.endswith('company_tickers.json') else fixture()
     monkeypatch.setattr(client,'get',get)
     f,url=client.facts('BRK.B')
-    assert url.endswith('CIK0001067983.json')
+    assert url.endswith('CIK0000320193.json')
     with pytest.raises(ValueError): client.facts('MISSING')
 
 def test_pe_dated_and_split_guard(tmp_path):

@@ -7,12 +7,15 @@ from screener.real import Cache, UNIVERSE, symbols, refresh, snapshot
 from screener.indicators import calculate
 from screener.rules import PRESETS, Rule, preset, evaluate
 from screener.charts import stock_chart
+from screener.config import load_sec_user_agent, CONFIG_WARNING
 
-st.set_page_config(page_title='Signal Studio · V2A',layout='wide')
+# The pinned Streamlit version permits mode selection before page configuration.
+# Only the selected entry point calls set_page_config; app.py stays unchanged.
 mode=st.sidebar.radio('Data mode',['DEMO','REAL'],key='v2a_mode')
 if mode=='DEMO':
     exec(compile(Path(__file__).with_name('app.py').read_text(),'app.py','exec'))
     st.stop()
+st.set_page_config(page_title='Signal Studio · V2A',layout='wide')
 st.title('◈ Signal Studio · REAL · Version 2A')
 st.warning('Limited US stock research pilot · SEC + Yahoo via yfinance · no guaranteed availability or redistribution license. No paid services or API keys.')
 cache=Cache()
@@ -22,14 +25,17 @@ with st.sidebar:
     ticker_text=st.text_area('REAL tickers (1–50)',','.join(UNIVERSE),key='real_tickers')
     try: universe=symbols(ticker_text)
     except ValueError as exc: st.error(str(exc)); st.stop()
-    ua=st.text_input('SEC User-Agent: app/operator and contact email',placeholder='My research screener Jane jane@example.com')
-    st.caption('Contact identity is required by SEC, not an API key. It is sent only as an HTTP header and is not saved in the data cache.')
+    ua=load_sec_user_agent(st.secrets)
+    if ua is None:
+        st.warning(CONFIG_WARNING)
+    else:
+        st.caption('SEC identity is configured server-side.')
     consent=st.checkbox('I have reviewed Yahoo terms and use this provider for permitted personal research')
-    if st.button('Refresh REAL data',disabled=not consent):
+    if st.button('Refresh REAL data',disabled=not consent or ua is None):
         try:
             with st.spinner('Sequentially refreshing prices and SEC facts; cached responses reused…'):
                 refresh(universe,ua,cache)
-        except ValueError as exc: st.error(str(exc))
+        except Exception: st.error('Refresh is unavailable. Last valid cached data is retained where possible.')
     watch=st.multiselect('REAL session watchlist',universe,key='real_watch')
     only=st.checkbox('Show REAL watchlist only')
     st.download_button('Export REAL watchlist',pd.DataFrame({'Symbol':watch}).to_csv(index=False),'REAL_watchlist.csv')
@@ -45,7 +51,10 @@ with st.expander('Edit REAL screening rules'):
     if any(not math.isfinite(r.lower) or not math.isfinite(r.upper) or r.operator=='between' and r.lower>r.upper for r in rules):
         st.error('Enter finite bounds and ordered ranges.'); st.stop()
     st.caption('CUSTOM' if edited.to_dict('records')!=[vars(r) for r in preset(strategy)] else 'Preset defaults')
-status=cache.get('status')
+def validate_status(data):
+    if not isinstance(data,dict) or any(not isinstance(v,dict) or any(not isinstance(x,str) for x in v.values()) for v in data.values()):
+        raise ValueError('Invalid status')
+status=cache.get('status',validator=validate_status)
 with st.expander('Provider status / failed symbols',expanded=True):
     st.caption('Last refresh attempt: '+(pd.Timestamp(status[0],unit='s',tz='UTC').isoformat() if status else 'Never'))
     if status: st.dataframe(pd.DataFrame(status[1]).T,use_container_width=True)
@@ -55,7 +64,11 @@ rows=[]; histories={}; detail={}; snapshots={}
 for symbol in universe:
     snap=snapshot(cache,symbol); snapshots[symbol]=snap
     bars=snap['bars']
-    history=calculate(bars,spy) if not bars.empty else bars
+    try:
+        history=calculate(bars,spy) if not bars.empty else bars
+    except Exception:
+        history=bars.iloc[:0]
+        cache._note('Technical calculations are unavailable for a symbol. Affected signals remain UNKNOWN.')
     histories[symbol]=history
     values={**snap['values'],**(history.iloc[-1].to_dict() if not history.empty else {})}
     result,dd=evaluate(values,rules,weight/100)
@@ -84,10 +97,17 @@ with inspect:
     st.caption('ROIC and Debt-to-Equity use approximate definitions; see Methods. Forward P/E is UNKNOWN.')
     st.caption(snap['pe_note'])
     st.dataframe(pd.DataFrame(detail[symbol]).fillna('UNKNOWN'),hide_index=True,use_container_width=True)
-    if not histories[symbol].empty: st.plotly_chart(stock_chart(histories[symbol].tail(220),symbol),use_container_width=True)
+    if not histories[symbol].empty:
+        try:
+            st.plotly_chart(stock_chart(histories[symbol].tail(220),symbol),use_container_width=True)
+        except Exception:
+            st.info('Chart unavailable for this symbol. Screening values remain visible.')
     else: st.info('No successful daily price response. Use Refresh REAL data.')
     st.download_button('Download REAL rule details',pd.DataFrame(detail[symbol]).assign(Mode='REAL',Symbol=symbol,Price_date=rows[universe.index(symbol)]['Price date'],Fiscal_year_end=snap['period']).to_csv(index=False,na_rep='UNKNOWN'),f'REAL_{symbol}_details.csv')
     with st.expander('SEC fact provenance (reported values, periods, filing dates and accession IDs)'):
         st.json(snap['provenance'])
 with methods:
     st.markdown(Path('V2A.md').read_text())
+
+for message in cache.warnings:
+    st.warning(message)
