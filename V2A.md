@@ -15,6 +15,16 @@ This is an illustrative placeholder, not a configured contact. The app reads `st
 
 Before expanding the universe, test AAPL (plus automatically fetched SPY), then AAPL/MSFT/NVDA/AMD/AMZN. Confirm dated source/provenance and independently compare SEC inputs against original filings and OHLCV/indicators against permitted reference data. Do not repeatedly retry 403/429 failures. Local TTLs remain in effect. Test malformed data and cache faults through the offline regression suite; do not intentionally damage a deployed app's only cache. Export any needed research results before restart/redeploy. No live-data validation is implied by a successful deployment or green offline tests.
 
+## REAL ranking and qualification explanations
+
+The Classification filter starts empty: no selection means all classifications (including UNKNOWN). A watchlist-only restriction still applies. The default view shows **All** matching stocks ordered by **Combined Score descending**. Choose **FA Score** or **TA Score** to rank on that component instead, and choose **Top 10**, **Top 20** or **All**. Filtering happens before sorting and limiting. Unavailable scores sort last and ties sort by ticker; missing scores are never filled. Combined Score retains the selected FA/TA weight and existing scoring formula.
+
+Each result has separate FA/TA qualification status, FAIL reasons and UNKNOWN reasons. A FAIL reason cites a known actual value and the edited screening threshold. UNKNOWN means the value is unavailable/non-comparable and cannot establish a failed financial condition. Stock detail lists every enabled rule, its actual value, precise threshold, status, role and explanation. Mandatory rules gate qualification; optional rules affect scores only unless the group has no mandatory rules, in which case the existing all-enabled-rules fallback applies and is explicitly labeled. Disabled rules are omitted. No providers, financial metrics, TA calculations, presets, scores or classification logic are changed by ranking controls.
+
+The ranked CSV exports the displayed, filtered/sorted/limited rows, qualification explanations, ranking choice and existing strategy/rule/source metadata. Rule-detail CSV retains raw values and adds the same explanations. Charts, watchlists and DEMO remain available.
+
+An existing Streamlit Community Cloud test app tracking `feature/version-2a-real-data` with main file `app_v2a.py` can receive this update from the same branch. **No entry-point or SEC Secrets changes are required.** Cloud normally picks up the branch update; use Manage app → Reboot if it does not refresh. Keep the existing `[sec] user_agent` value. A redeploy/reboot can discard the local cache and session-only preferences; use explicit REAL refresh if needed. Version 1 `app.py` is unchanged.
+
 ## Sources and cost
 
 SEC official ticker map: https://www.sec.gov/files/company_tickers.json ; Company Facts: https://data.sec.gov/api/xbrl/companyfacts/CIK##########.json . Follow https://www.sec.gov/search-filings/edgar-search-assistance/accessing-edgar-data . Identified User-Agent; serialized requests with ≥250ms start spacing (≤4/s per process), exponential retry on 429/transient server errors with numeric Retry-After support. Use a single personal instance; multiple processes/replicas do not share a global rate limiter.

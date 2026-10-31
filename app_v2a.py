@@ -8,6 +8,7 @@ from screener.indicators import calculate
 from screener.rules import PRESETS, Rule, preset, evaluate
 from screener.charts import stock_chart
 from screener.config import load_sec_user_agent, CONFIG_WARNING
+from screener.ranking import RANKINGS, LIMITS, rank_results, explain_rules, qualification_summary
 
 # The pinned Streamlit version permits mode selection before page configuration.
 # Only the selected entry point calls set_page_config; app.py stays unchanged.
@@ -73,22 +74,29 @@ for symbol in universe:
     values={**snap['values'],**(history.iloc[-1].to_dict() if not history.empty else {})}
     result,dd=evaluate(values,rules,weight/100)
     missing=[r.metric for r in rules if r.enabled and (values.get(r.metric) is None or pd.isna(values.get(r.metric)))]
-    detail[symbol]=dd
+    detail[symbol]=explain_rules(dd,rules)
     last=bars.index[-1].date().isoformat() if not bars.empty else 'UNKNOWN'
     stale=not bars.empty and (pd.Timestamp.now(tz='UTC').date()-bars.index[-1].date()).days>4
-    rows.append({'Symbol':symbol,**result,'Close USD':float(bars.Close.iloc[-1]) if not bars.empty else None,
+    rows.append({'Symbol':symbol,**result,**qualification_summary(detail[symbol]),'Close USD':float(bars.Close.iloc[-1]) if not bars.empty else None,
         'Missing data':' | '.join(missing),'Price date':last,'Stale price (>4 calendar days)':stale,
         'Fiscal year end':snap['period'],'Price refresh UTC':snap['price_refresh'],
         'Fundamentals payload refresh UTC':snap['fundamentals_refresh'],
         'Price source':snap['price_source'],'Fundamental source':snap['fundamental_source']})
-results=pd.DataFrame(rows).sort_values(['Score','Symbol'],ascending=[False,True])
+results=pd.DataFrame(rows)
 if only: results=results[results.Symbol.isin(watch)]
 rank,inspect,methods=st.tabs(['REAL ranked results','REAL stock detail','Methods and limitations'])
 with rank:
-    classes=st.multiselect('Classification',results.Classification.unique(),default=list(results.Classification.unique()))
-    shown=results[results.Classification.isin(classes)]
+    classes=st.multiselect('Classification',sorted(results.Classification.unique()),default=[],key='real_classifications')
+    st.caption('No classification selected means all classifications. Watchlist restrictions still apply.')
+    controls=st.columns(2)
+    ranking=controls[0].selectbox('Rank by',list(RANKINGS),key='real_ranking')
+    limit=controls[1].selectbox('Show results',list(LIMITS),index=2,key='real_limit')
+    matching=rank_results(results,classes,ranking,'All')
+    shown=rank_results(results,classes,ranking,limit)
+    st.caption(f'Showing {len(shown)} of {len(matching)} matching stocks · {ranking} descending · unavailable scores last; ties by symbol. Combined Score uses the selected FA/TA weight.')
+    st.caption('FAIL means a known value did not meet a qualification rule. UNKNOWN means the rule could not be evaluated. Optional rules affect scores; when a group has no mandatory rules, all its enabled rules gate qualification.')
     st.dataframe(shown,hide_index=True,use_container_width=True)
-    export=shown.assign(Mode='REAL',Strategy=strategy,FA_weight=weight/100,Rules=str([vars(r) for r in rules]))
+    export=shown.assign(Mode='REAL',Strategy=strategy,FA_weight=weight/100,Ranking=ranking,Ranking_limit=limit,Rules=str([vars(r) for r in rules]))
     st.download_button('Download REAL results CSV',export.to_csv(index=False,na_rep='UNKNOWN'),'REAL_screen_results.csv','text/csv')
 with inspect:
     symbol=st.selectbox('REAL symbol to inspect',universe)
@@ -96,6 +104,14 @@ with inspect:
     st.caption(f"Price refresh: {snap['price_refresh']} · Fundamentals payload refresh: {snap['fundamentals_refresh']} · Report period: {snap['period']}")
     st.caption('ROIC and Debt-to-Equity use approximate definitions; see Methods. Forward P/E is UNKNOWN.')
     st.caption(snap['pe_note'])
+    st.caption('Actual values and thresholds use the same units as the rule editor. FA percentages and RSI use points; Relative vs SPY uses decimal returns; FCF uses USD; boolean signals use 1=true, 0=false. Disabled rules are omitted.')
+    summary=qualification_summary(detail[symbol])
+    for group in ('FA','TA'):
+        st.write(f"{group} qualification: {summary[group+' qualification']}")
+        for state in ('FAIL','UNKNOWN'):
+            reasons=summary[f'{group} {state} reasons']
+            if reasons!='None':
+                st.write(f'{group} {state} reasons: {reasons}')
     st.dataframe(pd.DataFrame(detail[symbol]).fillna('UNKNOWN'),hide_index=True,use_container_width=True)
     if not histories[symbol].empty:
         try:
