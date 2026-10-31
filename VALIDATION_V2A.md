@@ -1,0 +1,21 @@
+# V2A validation record
+
+Latest offline ranking validation: 31 October 2026. Python 3.12, pandas 2.2.3, NumPy 2.3.5, Streamlit 1.66.1, yfinance 1.7.0, pytest 8.4.2.
+
+`python -m pytest -q`: **128 passed**. Includes the original V1 suite and V2A accounting, SEC HTTP mocks, required-field/issuer validation, malformed JSON/types/dates/numerics, ticker mapping, previous-data retention, split/dated P/E guards and independent scalar-loop technical references. Deployment regressions cover missing/malformed/valid Secrets (including actual local TOML parsing), contact redaction, exactly one page configuration per selected mode, malformed cached payloads, corrupt SQLite files/JSON rows/timestamps, backup recovery, locked/unavailable storage, calculation/chart errors and Streamlit DEMO/REAL rendering. Tests use labeled artificial fixtures, never a REAL-mode data fallback. Causal prefix checks cover history boundaries.
+
+Dependency check: `python -m pip check` reports **No broken requirements found**. Streamlit is pinned to **1.66.1**. `app.py` has the same Git blob SHA as `main` (`7a55a108b29d39bb2d62700c8de504e41d8467c8`), and the original Version 1 AppTest passes. `git diff --check` passes.
+
+All three deployment-review findings are addressed in code: single selected page initialization, private validated Secrets configuration, and provider/cache/render failure isolation. Recovery restores only readable backup/process data with original dates; unrecoverable data remains UNKNOWN. Local backups add IO/disk use and remain ephemeral; they are not a durable cloud database. Other dependency ranges remain bounded rather than fully locked.
+
+Ranking regressions additionally cover empty/multiple classification selections, all three score rankings, unavailable scores and deterministic ties, Top 10/20/All limits after filtering, watchlist restrictions, precise edited thresholds, boolean zero vs missing values, mandatory vs optional/fallback gates, separate FAIL/UNKNOWN summaries, and REAL UI interactions with 25 artificial test-only snapshots. Ranking changes do not modify provider calculations or fill missing data.
+
+Deployment compatibility: existing branch `feature/version-2a-real-data`, entry point `app_v2a.py` and `[sec] user_agent` Secrets configuration are unchanged. No deployment setting migration is required; ephemeral caches/session preferences may reset on redeploy.
+
+Live access: the earlier SEC HTTPS request failed at the managed proxy with `Tunnel connection failed: 403 Forbidden`. The enforced destination list excludes `www.sec.gov`, `data.sec.gov` and Yahoo endpoints. No attempt was made to circumvent that policy. This interface-only run uses offline provider mocks and makes no successful SEC/Yahoo validation claim; no new live-data request was required. GitHub connector access works; direct Git transport lacks credentials, so remote changes use the GitHub connector.
+
+**Not yet verified:** five-stock SEC filing reconciliation and live Yahoo daily-history integration. AAPL, MSFT, NVDA, AMD and AMZN are the intended validation sample; no figures are claimed verified. `scripts/validate_live.py` collects an audit packet on an appropriately configured network and exits nonzero on provider failure. A person must still compare facts/calculations to the original filing's financial statements and record accession/period/tolerance. Original filing URLs can be constructed from CIK and accession shown in provenance through SEC Archives; do not confuse Company Facts output with independent filing verification.
+
+**Implemented real-data paths:** official SEC mapping/facts, annual financial metrics, conservative trailing EPS bridge, replaceable Yahoo daily provider, all ten causal TA calculations, refresh/cache/status reporting and existing screening/chart/export behavior. Live operation depends on reachable providers and permitted use. **Unavailable by design:** forward P/E estimates, unsupported tags/IFRS/ADR conversions, unreconciled split P/E and non-comparable or missing financial facts. ROIC, narrow debt/equity and rounded EPS bridge are documented approximations.
+
+This is a draft personal-research pilot. No full-market coverage, unrestricted redistribution license, guaranteed availability or production readiness is asserted. Version 1's entry point and engine files are unchanged.
